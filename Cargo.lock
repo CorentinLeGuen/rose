@@ -1118,6 +1118,7 @@ dependencies = [
  "axum",
  "bytes",
  "dotenvy",
+ "futures",
  "object_store",
  "serde",
  "serde_json",

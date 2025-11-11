@@ -1,7 +1,5 @@
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    body::Body, extract::{Path, State}, http::StatusCode, response::IntoResponse
 };
 use crate::{error::AppError, storage::OSClient};
 
@@ -11,10 +9,12 @@ pub async fn get_object(
 ) -> Result<impl IntoResponse, AppError> {
     tracing::info!("GET request for key {}", key);
 
-    let data = client.get(&key).await?;
+    let stream = client.get(&key).await?;
+
+    let body = Body::from_stream(stream);
 
     Ok((
         StatusCode::OK,
-        data
+        body
     ))
 }

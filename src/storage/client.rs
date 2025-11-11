@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bytes::Bytes;
+use futures::stream::BoxStream;
 use object_store::{
     aws::AmazonS3Builder, 
     path::Path as ObjectPath, 
@@ -40,11 +41,10 @@ impl OSClient {
         })
     }
 
-    pub async fn get(&self, path: &str) -> Result<Bytes, object_store::Error> {
+    pub async fn get(&self, path: &str) -> Result<BoxStream<'static, Result<Bytes, object_store::Error>>, object_store::Error> {
         let location = ObjectPath::from(path);
         let result = self.store.get(&location).await?;
-        let bytes = result.bytes().await?;
-        Ok(bytes)
+        Ok(result.into_stream())
     }
 
     pub async fn head(&self, path: &str) -> Result<ObjectMeta, object_store::Error> {
