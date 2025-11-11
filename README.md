@@ -17,7 +17,6 @@ You must copy the [.env.example](.env.example) into a .env file and update crede
 ## TODO
 
 - :shipit: more features ...
-- downloading instead of showing results in GET response body
 - HEAD: get real metadata instead of just a HTTP status code
 - managing versionned buckets
 - :whale: Set up a container
