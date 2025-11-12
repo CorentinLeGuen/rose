@@ -137,16 +137,25 @@ impl MigrationTrait for Migration {
             .get_connection()
             .execute_unprepared(
                 r#"
-                CREATE OR REPLACE FUNCTION set_file_added_at()
-                RETURNS TRIGGER AS $$
+                CREATE FUNCTION set_file_added_at()
+                RETURNS TRIGGER AS '
                 BEGIN
-                    IF TG_OP = 'INSERT' THEN
-                        NEW.added_at = NOW();
+                    IF TG_OP = ''INSERT'' THEN
+                        NEW = ROW((NEW).file_key, (NEW).user_id, (NEW).file_name, (NEW).file_path, 
+                                 (NEW).content_type, (NEW).content_size, (NEW).version, (NEW).is_latest, 
+                                 NOW(), (NEW).deletion_mark_at);
                     END IF;
                     RETURN NEW;
                 END;
-                $$ LANGUAGE plpgsql;
+                ' LANGUAGE plpgsql;
+                "#,
+            )
+            .await?;
 
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
                 CREATE TRIGGER trigger_set_file_added_at
                 BEFORE INSERT ON files
                 FOR EACH ROW
@@ -159,16 +168,23 @@ impl MigrationTrait for Migration {
             .get_connection()
             .execute_unprepared(
                 r#"
-                CREATE OR REPLACE FUNCTION update_user_on_file_change()
-                RETURNS TRIGGER AS $$
+                CREATE FUNCTION update_user_on_file_change()
+                RETURNS TRIGGER AS '
                 BEGIN
                     UPDATE users
                     SET updated_at = NOW()
-                    WHERE user_id = NEW.user_id;
+                    WHERE user_id = (NEW).user_id;
                     RETURN NEW;
                 END;
-                $$ LANGUAGE plpgsql;
+                ' LANGUAGE plpgsql;
+                "#,
+            )
+            .await?;
 
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
                 CREATE TRIGGER trigger_update_user_on_file_insert
                 AFTER INSERT ON files
                 FOR EACH ROW
@@ -181,16 +197,23 @@ impl MigrationTrait for Migration {
             .get_connection()
             .execute_unprepared(
                 r#"
-                CREATE OR REPLACE FUNCTION set_user_updated_at()
-                RETURNS TRIGGER AS $$
+                CREATE FUNCTION set_user_updated_at()
+                RETURNS TRIGGER AS '
                 BEGIN
-                    IF TG_OP = 'INSERT' THEN
-                        NEW.updated_at = NOW();
+                    IF TG_OP = ''INSERT'' THEN
+                        NEW = ROW((NEW).user_id, (NEW).total_space_used, NOW(), (NEW).last_auto_sync_at);
                     END IF;
                     RETURN NEW;
                 END;
-                $$ LANGUAGE plpgsql;
+                ' LANGUAGE plpgsql;
+                "#,
+            )
+            .await?;
 
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
                 CREATE TRIGGER trigger_set_user_updated_at
                 BEFORE INSERT ON users
                 FOR EACH ROW

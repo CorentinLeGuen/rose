@@ -6,13 +6,16 @@ Rose (Rust Object storage Env) is a service based on [_object_store_](https://do
 
 ## :package: Using Cargo
 
+Database migrations: `cargo run --bin migrate` (currently using cockroachdb).
+
 You must copy the [.env.example](.env.example) into a .env file and update credentials.
 
 `cargo build --release` and then [rose app should be available](./target/release/rose).
 
 ## Current features
 
-- Basic GET, PUT, HEAD and DELETE endpoints 
+- Basic GET, PUT, HEAD and DELETE endpoints
+- Database schema migrations
 
 ## TODO
 
