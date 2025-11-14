@@ -5,15 +5,15 @@ use axum::{
     response::IntoResponse
 };
 use mime_guess;
-use crate::{error::AppError, storage::OSClient};
+use crate::{AppState, error::AppError};
 
 pub async fn get_object(
-    State(client): State<OSClient>,
+    State(client): State<AppState>,
     Path(key): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     tracing::info!("GET request for key {}", key);
 
-    let stream = client.get(&key).await?;
+    let stream = client.store_client.get(&key).await?;
 
     let file_name = key.rsplit('/').next().unwrap_or(&key);
     let body = Body::from_stream(stream);

@@ -5,15 +5,15 @@ use axum::{
     Json,
 };
 use serde_json::json;
-use crate::{error::AppError, storage::OSClient};
+use crate::{AppState, error::AppError};
 
 pub async fn head_object(
-    State(client): State<OSClient>,
+    State(client): State<AppState>,
     Path(key): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     tracing::info!("HEAD request for key {}", key);
 
-    let metadata = client.head(&key).await?;
+    let metadata = client.store_client.head(&key).await?;
 
     Ok((
         StatusCode::OK,

@@ -1,4 +1,5 @@
 use sea_orm::entity::prelude::*;
+use sea_orm::Set;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
@@ -24,3 +25,17 @@ impl Related<super::file::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl ActiveModel {
+    pub fn new(
+        user_id: Uuid,
+        total_space_used: i64,
+    ) -> Self {
+        Self {
+            user_id: Set(user_id),
+            total_space_used: Set(total_space_used),
+            updated_at: Set(chrono::Utc::now().naive_utc()),
+            last_auto_sync_at: Set(None),
+        }
+    }
+}
