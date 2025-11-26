@@ -20,7 +20,11 @@ pub async fn put_object(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| Uuid::parse_str(v).ok())
         .ok_or(AppError::BadRequest("Missing or invalid x-user-id header".to_string()))?;
-    let content_type = mime_guess::from_path(&key).first_or_octet_stream().to_string();
+    let content_type = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or(mime_guess::from_path(&key).first_or_octet_stream().to_string().as_str())
+        .to_string();
     let content_size = body.len() as i64;
 
     tracing::info!("PUT request from user {} for key {} ({} bytes)", user_id, key, content_size);
