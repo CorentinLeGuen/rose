@@ -22,13 +22,21 @@ pub async fn delete_object(
         .ok_or(AppError::BadRequest("Missing or invalid x-user-id header".to_string()))?;
     tracing::info!("DELETE request for user {} for key {}", user_id, key);
 
-    client.store_client.delete(&key).await?;
-
+    // Retrieve file metadata from the database
     let file = file::Entity::find()
-        .filter(file::Column::FilePath.eq(key.clone()))
+        .filter(
+            Condition::all()
+                .add(file::Column::UserId.eq(user_id))
+                .add(file::Column::FilePath.eq(key.clone()))
+        )
         .one(&client.db)
         .await?
-        .ok_or(AppError::NotFound("File metadata not found".to_string()))?;
+        .ok_or(AppError::NotFound("File not found".to_string()))?;
+
+    // Delete the object from the Object Storage
+    client.store_client.delete(file.file_key.to_string().as_str()).await?;
+
+    // Delete the file metadata from the database
     file.delete(&client.db).await?;
 
     Ok((

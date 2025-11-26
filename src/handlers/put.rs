@@ -14,12 +14,14 @@ pub async fn put_object(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<impl IntoResponse, AppError> {
-    // Extract user ID from headers (assuming some form of authentication is done)
+    // Extract user ID from headers (assuming some authentication is done)
     let user_id: Uuid = headers
         .get("x-user-id")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| Uuid::parse_str(v).ok())
         .ok_or(AppError::BadRequest("Missing or invalid x-user-id header".to_string()))?;
+
+    // Extract Content-Type and Content-Length from headers
     let content_type = headers
         .get("content-type")
         .and_then(|v| v.to_str().ok())
@@ -29,9 +31,7 @@ pub async fn put_object(
 
     tracing::info!("PUT request from user {} for key {} ({} bytes)", user_id, key, content_size);
 
-    // Store the object in the Object Storage
-    let put_result = client.store_client.put(&key, body).await?;
-
+    // Create or update user record if not exists
     let user_exists = user::Entity::find()
         .filter(user::Column::UserId.eq(user_id))
         .one(&client.db)
@@ -53,16 +53,25 @@ pub async fn put_object(
         key.clone(),
         content_type,
         content_size,
-        put_result.version.unwrap_or_default(),
+        "0".to_string(), // Placeholder for version, should be updated by Object Storage response
     );
     let file_record = new_file.insert(&client.db).await?;
+    let file_uuid = file_record.file_key.to_string();
+
+    // Store the object in the Object Storage
+    let put_result = client.store_client.put(file_uuid.as_str(), body).await?;
+
+    // Update file record with version info from Object Storage
+    let mut file_updated: file::ActiveModel = file_record.into();
+    file_updated.version = Set(put_result.version.unwrap_or_default());
+    file_updated.update(&client.db).await?;
 
     Ok((
         StatusCode::CREATED,
         Json(json!({
             "message": "Object created successfully",
             "key": key,
-            "file_id": file_record.file_key,
+            "file_key": file_uuid,
         }))
     ))
 }
