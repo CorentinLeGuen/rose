@@ -2,10 +2,7 @@ use anyhow::Result;
 use bytes::Bytes;
 use futures::stream::BoxStream;
 use object_store::{
-    aws::AmazonS3Builder, 
-    path::Path as ObjectPath, 
-    ObjectMeta, 
-    ObjectStore,
+    ObjectMeta, ObjectStore, PutResult, aws::AmazonS3Builder, path::Path as ObjectPath
 };
 use std::sync::Arc;
 
@@ -52,10 +49,9 @@ impl OSClient {
         self.store.head(&location).await
     }
 
-    pub async fn put(&self, path: &str, data: Bytes) -> Result<(), object_store::Error> {
+    pub async fn put(&self, path: &str, data: Bytes) -> Result<PutResult, object_store::Error> {
         let location = ObjectPath::from(path);
-        self.store.put(&location, data.into()).await?;
-        Ok(())
+        self.store.put(&location, data.into()).await
     }
 
     pub async fn delete(&self, path: &str) -> Result<(), object_store::Error> {

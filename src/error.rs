@@ -9,7 +9,9 @@ use serde_json::json;
 pub enum AppError {
     NotFound(String),
     StorageError(object_store::Error),
+    DatabaseError(sea_orm::DbErr),
     InternalError(anyhow::Error),
+    BadRequest(String),
 }
 
 impl IntoResponse for AppError {
@@ -20,10 +22,15 @@ impl IntoResponse for AppError {
                 tracing::error!("Storage error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, format!("Storage error {}", err))
             }
+            AppError::DatabaseError(err) => {
+                tracing::error!("Database error: {:?}", err);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error {}", err))
+            }
             AppError::InternalError(err) => {
                 tracing::error!("Internal server error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             }
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
         };
 
         let body = Json(json!({
@@ -48,5 +55,11 @@ impl From<object_store::Error> for AppError {
 impl From<anyhow::Error> for AppError {
     fn from(err: anyhow::Error) -> Self {
         AppError::InternalError(err)
+    }
+}
+
+impl From<sea_orm::DbErr> for AppError {
+    fn from(err: sea_orm::DbErr) -> Self {
+        AppError::DatabaseError(err)
     }
 }

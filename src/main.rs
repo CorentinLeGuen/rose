@@ -2,6 +2,7 @@ mod config;
 mod error;
 mod handlers;
 mod storage;
+mod entities;
 
 use axum::{
     routing::{get, head, put, delete},
@@ -9,9 +10,16 @@ use axum::{
 };
 use config::Config;
 use storage::{OSClient, OSConfig};
+use sea_orm::{Database, DatabaseConnection};
 use tower::{ServiceBuilder};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Clone)]
+pub struct AppState {
+    pub store_client: OSClient,
+    pub db: DatabaseConnection,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -39,13 +47,21 @@ async fn main() -> anyhow::Result<()> {
     let store_client = OSClient::new(store_config)?;
     tracing::info!("Object Store initialized");
 
+    let db = Database::connect(config.db_url.clone()).await?;
+    tracing::info!("Database connected");
+
+    let state = AppState {
+        store_client,
+        db,
+    };
+
     let app = Router::new()
         .route("/objects/{*key}", get(handlers::get_object))
         .route("/objects/{*key}", head(handlers::head_object))
         .route("/objects/{*key}", put(handlers::put_object))
         .route("/objects/{*key}", delete(handlers::delete_object))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()))
-        .with_state(store_client);
+        .with_state(state);
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
