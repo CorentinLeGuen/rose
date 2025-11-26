@@ -1,29 +1,73 @@
-use std::net::SocketAddr;
+mod config;
+mod error;
+mod handlers;
+mod storage;
+mod entities;
+
 use axum::{
-    routing::get,
-    Json,
+    routing::{get, head, put, delete},
     Router,
 };
-use serde::Serialize;
+use config::Config;
+use storage::{OSClient, OSConfig};
+use sea_orm::{Database, DatabaseConnection};
+use tower::{ServiceBuilder};
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[derive(Serialize)]
-struct HealthResponse {
-    status: &'static str,
-}
-
-async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok" })
+#[derive(Clone)]
+pub struct AppState {
+    pub store_client: OSClient,
+    pub db: DatabaseConnection,
 }
 
 #[tokio::main]
-async fn main() {
-    let app = Router::new().route("/health", get(health));
+async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 
-    let addr: SocketAddr = "0.0.0.0:8003".parse().unwrap();
-    println!("Service running on {}", addr);
+    // loading config
+    let config = Config::from_env()?;
+    tracing::info!("Config loaded, bucket {} and region {}", config.os_bucket, config.os_region);
+    
+    // create Object Storage client
+    let store_config = OSConfig {
+        bucket: config.os_bucket.clone(),
+        region: config.os_region.clone(),
+        access_key_id: config.os_access_key_id.clone(),
+        secret_access_key: config.os_secret_access_key.clone(),
+        endpoint: config.os_endpoint.clone(),
+    };
+    let store_client = OSClient::new(store_config)?;
+    tracing::info!("Object Store initialized");
 
-    axum::serve(
-        tokio::net::TcpListener::bind(addr).await.unwrap(),
-        app
-    ).await.unwrap();
+    let db = Database::connect(config.db_url.clone()).await?;
+    tracing::info!("Database connected");
+
+    let state = AppState {
+        store_client,
+        db,
+    };
+
+    let app = Router::new()
+        .route("/objects/{*key}", get(handlers::get_object))
+        .route("/objects/{*key}", head(handlers::head_object))
+        .route("/objects/{*key}", put(handlers::put_object))
+        .route("/objects/{*key}", delete(handlers::delete_object))
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()))
+        .with_state(state);
+
+    let addr = format!("{}:{}", config.server_host, config.server_port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    tracing::info!("Server listening on {}", addr);
+
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }
