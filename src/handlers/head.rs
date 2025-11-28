@@ -32,6 +32,7 @@ pub async fn head_object(
     headers.insert(header::CONTENT_LENGTH, file.content_size.to_string().parse().unwrap());
     headers.insert(header::CONTENT_TYPE, file.content_type.parse().unwrap());
     headers.insert(header::CONTENT_LOCATION, file.file_path.parse().unwrap());
+    headers.insert(header::DATE, file.added_at.to_string().parse().unwrap());
 
     Ok((
         StatusCode::OK,
