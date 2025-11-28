@@ -6,6 +6,7 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Table users
         manager
             .create_table(
                 Table::create()
@@ -19,7 +20,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Users::TotalSpaceUsed).big_integer().not_null().default(0))
                     .col(ColumnDef::new(Users::UpdatedAt).timestamp().not_null())
-                    .col(ColumnDef::new(Users::LastAutoSyncAt).timestamp())
+                    .col(ColumnDef::new(Users::LastAutoSyncAt).timestamp().null())
                     .to_owned(),
             )
             .await?;
@@ -35,17 +36,19 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // Table files
         manager
             .create_table(
                 Table::create()
                     .table(Files::Table)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(Files::FileKey)
+                        ColumnDef::new(Files::Id)
                             .uuid()
                             .not_null()
                             .primary_key(),
                     )
+                    .col(ColumnDef::new(Files::FileKey).uuid().not_null())
                     .col(ColumnDef::new(Files::UserId).uuid().not_null())
                     .col(ColumnDef::new(Files::FileName).string().not_null())
                     .col(ColumnDef::new(Files::FilePath).string().not_null())
@@ -54,7 +57,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Files::Version).string().not_null())
                     .col(ColumnDef::new(Files::IsLatest).boolean().not_null().default(true))
                     .col(ColumnDef::new(Files::AddedAt).timestamp().not_null())
-                    .col(ColumnDef::new(Files::DeletionMarkAt).timestamp())
+                    .col(ColumnDef::new(Files::DeletionMarkAt).timestamp().null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_files_user_id")
@@ -62,6 +65,18 @@ impl MigrationTrait for Migration {
                             .to(Users::Table, Users::UserId)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create indexes
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_files_id")
+                    .table(Files::Table)
+                    .col(Files::Id)
                     .to_owned(),
             )
             .await?;
@@ -143,7 +158,7 @@ impl MigrationTrait for Migration {
                     IF TG_OP = ''INSERT'' THEN
                         NEW = ROW((NEW).file_key, (NEW).user_id, (NEW).file_name, (NEW).file_path, 
                                  (NEW).content_type, (NEW).content_size, (NEW).version, (NEW).is_latest, 
-                                 NOW(), (NEW).deletion_mark_at);
+                                 NOW()::TIMESTAMP, (NEW).deletion_mark_at);
                     END IF;
                     RETURN NEW;
                 END;
@@ -172,7 +187,7 @@ impl MigrationTrait for Migration {
                 RETURNS TRIGGER AS '
                 BEGIN
                     UPDATE users
-                    SET updated_at = NOW()
+                    SET updated_at = NOW()::TIMESTAMP
                     WHERE user_id = (NEW).user_id;
                     RETURN NEW;
                 END;
@@ -201,7 +216,7 @@ impl MigrationTrait for Migration {
                 RETURNS TRIGGER AS '
                 BEGIN
                     IF TG_OP = ''INSERT'' THEN
-                        NEW = ROW((NEW).user_id, (NEW).total_space_used, NOW(), (NEW).last_auto_sync_at);
+                        NEW = ROW((NEW).user_id, (NEW).total_space_used, NOW()::TIMESTAMP, (NEW).last_auto_sync_at);
                     END IF;
                     RETURN NEW;
                 END;
@@ -222,6 +237,66 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // Create trigger to increment user's total_space_used on file insert
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
+                CREATE FUNCTION increment_user_space()
+                RETURNS TRIGGER AS '
+                BEGIN
+                    UPDATE users
+                    SET total_space_used = total_space_used + (NEW).content_size
+                    WHERE user_id = (NEW).user_id;
+                    RETURN NEW;
+                END;
+                ' LANGUAGE plpgsql;
+                "#,
+            )
+            .await?;
+
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
+                CREATE TRIGGER trigger_increment_user_space
+                AFTER INSERT ON files
+                FOR EACH ROW
+                EXECUTE FUNCTION increment_user_space();
+                "#,
+            )
+            .await?;
+
+        // Create trigger to decrement user's total_space_used on file delete
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
+                CREATE FUNCTION decrement_user_space()
+                RETURNS TRIGGER AS '
+                BEGIN
+                    UPDATE users
+                    SET total_space_used = total_space_used - (OLD).content_size
+                    WHERE user_id = (OLD).user_id;
+                    RETURN OLD;
+                END;
+                ' LANGUAGE plpgsql;
+                "#,
+            )
+            .await?;
+
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
+                CREATE TRIGGER trigger_decrement_user_space
+                AFTER DELETE ON files
+                FOR EACH ROW
+                EXECUTE FUNCTION decrement_user_space();
+                "#,
+            )
+            .await?;
+
         Ok(())
     }
 
@@ -236,6 +311,10 @@ impl MigrationTrait for Migration {
                 DROP FUNCTION IF EXISTS update_user_on_file_change;
                 DROP TRIGGER IF EXISTS trigger_set_user_updated_at ON users;
                 DROP FUNCTION IF EXISTS set_user_updated_at;
+                DROP TRIGGER IF EXISTS trigger_increment_user_space ON files;
+                DROP FUNCTION IF EXISTS increment_user_space;
+                DROP TRIGGER IF EXISTS trigger_decrement_user_space ON files;
+                DROP FUNCTION IF EXISTS decrement_user_space;
                 "#,
             )
             .await?;
@@ -264,6 +343,7 @@ enum Users {
 #[derive(DeriveIden)]
 enum Files {
     Table,
+    Id,
     FileKey,
     UserId,
     FileName,

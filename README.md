@@ -10,6 +10,8 @@ Rose (Rust Object Storage Env) is a service based on [_object_store_](https://do
 
 Rose is using [cockroachDB](https://www.cockroachlabs.com/) as database and migrations are made with `cargo run --bin migrate`.
 
+You can setup a cockroach container with `docker run -d --name rosedb -p 26257:26257 cockroachdb/cockroach:latest start-single-node --insecure` and, then, set up database with `cargo run --bin migrate` to apply database migrations.
+
 ### Env
 
 You must copy the [.env.example](.env.example) into a .env file and update credentials.
