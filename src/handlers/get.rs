@@ -27,6 +27,7 @@ pub async fn get_object(
             Condition::all()
                 .add(file::Column::UserId.eq(user_id))
                 .add(file::Column::FilePath.eq(key.clone()))
+                .add(file::Column::IsLatest.eq(true))
         )
         .one(&client.db)
         .await?

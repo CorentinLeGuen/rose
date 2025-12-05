@@ -45,33 +45,83 @@ pub async fn put_object(
         tracing::info!("Created new user with user_id {}", user_id);
     }
 
-    // Save file metadata to the database
-    let new_file = file::ActiveModel::new(
-        Uuid::now_v7(),
-        user_id,
-        key.split('/').last().unwrap_or(&key).to_string(),
-        key.clone(),
-        content_type,
-        content_size,
-        "0".to_string(), // Placeholder for version, should be updated by Object Storage response
-    );
-    let file_record = new_file.insert(&client.db).await?;
-    let file_uuid = file_record.file_key.to_string();
+    // Check if file with the same key already exists for the user
+    let existing_file = file::Entity::find()
+        .filter(file::Column::UserId.eq(user_id))
+        .filter(file::Column::FilePath.eq(key.clone()))
+        .filter(file::Column::IsLatest.eq(true))
+        .one(&client.db)
+        .await?;
+    if existing_file.is_some() {
+        // Extracting the existing file to updateselect 
+        let mut existing_file: file::ActiveModel = existing_file.unwrap().into();
 
-    // Store the object in the Object Storage
-    let put_result = client.store_client.put(file_uuid.to_string().as_str(), body).await?;
+        // Create a new version of the existing file
+        let new_file_version = file::ActiveModel::new(
+            existing_file.file_key.clone().unwrap(),
+            user_id,
+            key.split('/').last().unwrap_or(&key).to_string(),
+            key.clone(),
+            content_type.clone(),
+            content_size,
+            "0".to_string(), // Placeholder for version, should be updated by Object Storage response
+        );
+        let file_record = new_file_version.insert(&client.db).await?;
+        let file_key = file_record.file_key.to_string();
 
-    // Update file record with version info from Object Storage
-    let mut file_updated: file::ActiveModel = file_record.into();
-    file_updated.version = Set(put_result.version.unwrap_or_default());
-    file_updated.update(&client.db).await?;
+        // Store the object in the Object Storage
+        let put_result = client.store_client.put(file_key.to_string().as_str(), body).await?;
+        let file_version = put_result.version.unwrap_or_default();
 
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({
-            "message": "Object created successfully",
-            "key": key,
-            "file_key": file_uuid,
-        }))
-    ))
+        // Update file record with version info from Object Storage
+        let mut file_updated: file::ActiveModel = file_record.into();
+        file_updated.version = Set(file_version.clone());
+        file_updated.update(&client.db).await?;
+
+        // Mark the existing file as not latest
+        existing_file.is_latest = Set(false);
+        existing_file.update(&client.db).await?;
+
+        Ok((
+            StatusCode::CREATED,
+            Json(json!({
+                "message": "New object version created successfully",
+                "file_path": key,
+                "file_key": file_key,
+                "version": file_version,
+            }))
+        ))
+    } else {
+        // Save file metadata to the database
+        let new_file = file::ActiveModel::new(
+            Uuid::now_v7(),
+            user_id,
+            key.split('/').last().unwrap_or(&key).to_string(),
+            key.clone(),
+            content_type,
+            content_size,
+            "0".to_string(), // Placeholder for version, should be updated by Object Storage response
+        );
+        let file_record = new_file.insert(&client.db).await?;
+        let file_key = file_record.file_key.to_string();
+
+        // Store the object in the Object Storage
+        let put_result = client.store_client.put(file_key.to_string().as_str(), body).await?;
+        let file_version = put_result.version.unwrap_or_default();
+
+        // Update file record with version info from Object Storage
+        let mut file_updated: file::ActiveModel = file_record.into();
+        file_updated.version = Set(file_version.clone());
+        file_updated.update(&client.db).await?;
+
+        Ok((
+            StatusCode::CREATED,
+            Json(json!({
+                "message": "New object created successfully",
+                "file_path": key,
+                "file_key": file_key,
+                "version": file_version,
+            }))
+        ))
+    }
 }
