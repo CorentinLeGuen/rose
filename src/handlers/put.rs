@@ -4,9 +4,8 @@ use axum::{
 use mime_guess;
 use uuid::Uuid;
 use sea_orm::*;
-use rose::entities::file;
 use serde_json::json;
-use crate::{AppState, error::AppError, entities::user};
+use crate::{AppState, error::AppError, entities::user, entities::file};
 
 pub async fn put_object(
     State(client): State<AppState>,
@@ -48,6 +47,7 @@ pub async fn put_object(
 
     // Save file metadata to the database
     let new_file = file::ActiveModel::new(
+        Uuid::now_v7(),
         user_id,
         key.split('/').last().unwrap_or(&key).to_string(),
         key.clone(),
@@ -59,7 +59,7 @@ pub async fn put_object(
     let file_uuid = file_record.file_key.to_string();
 
     // Store the object in the Object Storage
-    let put_result = client.store_client.put(file_uuid.as_str(), body).await?;
+    let put_result = client.store_client.put(file_uuid.to_string().as_str(), body).await?;
 
     // Update file record with version info from Object Storage
     let mut file_updated: file::ActiveModel = file_record.into();

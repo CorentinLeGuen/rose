@@ -57,7 +57,6 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Files::Version).string().not_null())
                     .col(ColumnDef::new(Files::IsLatest).boolean().not_null().default(true))
                     .col(ColumnDef::new(Files::AddedAt).timestamp().not_null())
-                    .col(ColumnDef::new(Files::DeletionMarkAt).timestamp().null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_files_user_id")
@@ -156,9 +155,10 @@ impl MigrationTrait for Migration {
                 RETURNS TRIGGER AS '
                 BEGIN
                     IF TG_OP = ''INSERT'' THEN
-                        NEW = ROW((NEW).file_key, (NEW).user_id, (NEW).file_name, (NEW).file_path, 
-                                 (NEW).content_type, (NEW).content_size, (NEW).version, (NEW).is_latest, 
-                                 NOW()::TIMESTAMP, (NEW).deletion_mark_at);
+                        NEW = ROW((NEW).id, (NEW).file_key, (NEW).user_id, 
+                                  (NEW).file_name, (NEW).file_path, 
+                                  (NEW).content_type, (NEW).content_size, (NEW).version, (NEW).is_latest, 
+                                   NOW()::TIMESTAMP);
                     END IF;
                     RETURN NEW;
                 END;
@@ -353,5 +353,4 @@ enum Files {
     Version,
     IsLatest,
     AddedAt,
-    DeletionMarkAt,
 }

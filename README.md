@@ -4,7 +4,7 @@ Rose (Rust Object Storage Env) is a service based on [_object_store_](https://do
 
 [![Project Status](https://img.shields.io/badge/status-in%20development-orange?style=for-the-badge)](https://github.com/CorentinLeGuen/nuage/tags)
 
-## How to install
+## Requirements
 
 ### Database
 
@@ -12,13 +12,15 @@ Rose is using [cockroachDB](https://www.cockroachlabs.com/) as database and migr
 
 You can setup a cockroach container with `docker run -d --name rosedb -p 26257:26257 cockroachdb/cockroach:latest start-single-node --insecure` and, then, set up database with `cargo run --bin migrate` to apply database migrations.
 
-### Env
+### Object Storage
 
-You must copy the [.env.example](.env.example) into a .env file and update credentials.
+Rose needs a Bucket (Object Storage). I am using a basic [lifecycle policy](lifecycle-policy.json) to cleanup deleted files after 30 days and aborted multipart uploads after 7 days.
 
-### Build
+### Build & Run
 
-`cargo build --release` and then [rose app should be available here](./target/release/rose).
+Set your access keys and credentials: `cp .env.example .env`.
+
+And build the app with `cargo build --release`, and then [rose app should be available here](./target/release/rose).
 
 ## Current features
 
@@ -28,8 +30,9 @@ You must copy the [.env.example](.env.example) into a .env file and update crede
 ## TODO
 
 - :shipit: more features ...
+- http requests collection ? JSON or .http scripts
 - managing versionned buckets
-- :whale: Set up a container
+- :whale: Set up Rust as a container
 - multipart uploads
 - tests
 

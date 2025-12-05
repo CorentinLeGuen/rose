@@ -1,4 +1,4 @@
-use sea_orm::entity::prelude::*;
+use sea_orm::{entity::prelude::*};
 use sea_orm::Set;
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[sea_orm(table_name = "files")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
     pub file_key: Uuid,
     pub user_id: Uuid,
     pub file_name: String,
@@ -15,7 +16,6 @@ pub struct Model {
     pub version: String,
     pub is_latest: bool,
     pub added_at: DateTime,
-    pub deletion_mark_at: Option<DateTime>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -39,6 +39,7 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl ActiveModel {
     pub fn new(
+        file_key: Uuid,
         user_id: Uuid,
         file_name: String,
         file_path: String,
@@ -47,7 +48,8 @@ impl ActiveModel {
         version: String,
     ) -> Self {
         Self {
-            file_key: Set(Uuid::now_v7()),
+            id: Set(Uuid::now_v7()),
+            file_key: Set(file_key),
             user_id: Set(user_id),
             file_name: Set(file_name),
             file_path: Set(file_path),
@@ -56,7 +58,6 @@ impl ActiveModel {
             version: Set(version),
             is_latest: Set(true),
             added_at: Set(chrono::Utc::now().naive_utc()),
-            deletion_mark_at: Set(None),
         }
     }
 }
