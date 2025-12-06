@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     pub s3_region: String,
     pub s3_bucket: String,

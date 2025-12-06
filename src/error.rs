@@ -5,10 +5,9 @@ use axum::{
 };
 use serde_json::json;
 
-#[derive(Debug)]
 pub enum AppError {
     NotFound(String),
-    StorageError(object_store::Error),
+    StorageError(aws_sdk_s3::Error),
     DatabaseError(sea_orm::DbErr),
     InternalError(anyhow::Error),
     BadRequest(String),
@@ -41,11 +40,14 @@ impl IntoResponse for AppError {
     }
 }
 
-impl From<object_store::Error> for AppError {
-    fn from(err: object_store::Error) -> Self {
+impl From<aws_sdk_s3::Error> for AppError {
+    fn from(err: aws_sdk_s3::Error) -> Self {
         match err {
-            object_store::Error::NotFound { .. } => {
+            aws_sdk_s3::Error::NotFound { .. } => {
                 AppError::NotFound("Object not found".to_string())
+            }
+            aws_sdk_s3::Error::NoSuchKey { .. } => {
+                AppError::NotFound("No object found for key provided".to_string())
             }
             _ => AppError::StorageError(err),
         }
