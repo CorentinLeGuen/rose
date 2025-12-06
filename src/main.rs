@@ -9,7 +9,7 @@ use axum::{
     Router,
 };
 use config::Config;
-use storage::{OSClient, OSConfig};
+use storage::{S3Client, S3Config};
 use sea_orm::{Database, DatabaseConnection};
 use tower::{ServiceBuilder};
 use tower_http::trace::TraceLayer;
@@ -17,7 +17,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub store_client: OSClient,
+    pub store_client: S3Client,
     pub db: DatabaseConnection,
 }
 
@@ -34,17 +34,17 @@ async fn main() -> anyhow::Result<()> {
 
     // loading config
     let config = Config::from_env()?;
-    tracing::info!("Config loaded, bucket {} and region {}", config.os_bucket, config.os_region);
+    tracing::info!("Config loaded, bucket {} and region {}", config.s3_bucket, config.s3_region);
     
     // create Object Storage client
-    let store_config = OSConfig {
-        bucket: config.os_bucket.clone(),
-        region: config.os_region.clone(),
-        access_key_id: config.os_access_key_id.clone(),
-        secret_access_key: config.os_secret_access_key.clone(),
-        endpoint: config.os_endpoint.clone(),
+    let store_config = S3Config {
+        endpoint: config.s3_endpoint.clone(),
+        access_key_id: config.s3_access_key_id.clone(),
+        secret_access_key: config.s3_secret_access_key.clone(),
+        region: config.s3_region.clone(),
+        bucket: config.s3_bucket.clone(),
     };
-    let store_client = OSClient::new(store_config)?;
+    let store_client = S3Client::new(store_config).await;
     tracing::info!("Object Store initialized");
 
     let db = Database::connect(config.db_url.clone()).await?;
