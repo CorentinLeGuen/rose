@@ -1,2 +1,2 @@
 pub mod client;
-pub use client::{OSClient, OSConfig};
+pub use client::{S3Client, S3Config};
