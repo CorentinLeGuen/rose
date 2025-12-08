@@ -12,7 +12,7 @@ use aws_sdk_s3::{
 use bytes::Bytes;
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct S3Config {
     pub endpoint: Option<String>,
     pub access_key_id: String,
@@ -48,6 +48,14 @@ impl S3Client {
         Self {
             client,
             bucket: config.bucket,
+        }
+    }
+
+    fn map_sdk_error<E: std::fmt::Display>(e: SdkError<E>) -> AppError {
+        let msg = match e {
+            SdkError::ConstructionFailure(ref e) => format!("S3 Failure"),
+            SdkError::DispatchFailure(_) => "Network failure".to_string(),
+            SdkError::ResponseError(ref r) => format!("Response error: {}", r),
         }
     }
 

@@ -71,7 +71,7 @@ pub async fn put_object(
 
         // Store the object in the Object Storage
         let put_result = client.store_client.put(file_key.to_string().as_str(), body).await?;
-        let file_version = put_result.version.unwrap_or_default();
+        let file_version = put_result.version_id.unwrap_or_default();
 
         // Update file record with version info from Object Storage
         let mut file_updated: file::ActiveModel = file_record.into();
@@ -107,7 +107,7 @@ pub async fn put_object(
 
         // Store the object in the Object Storage
         let put_result = client.store_client.put(file_key.to_string().as_str(), body).await?;
-        let file_version = put_result.version.unwrap_or_default();
+        let file_version = put_result.version_id.unwrap_or_default();
 
         // Update file record with version info from Object Storage
         let mut file_updated: file::ActiveModel = file_record.into();

@@ -35,7 +35,7 @@ pub async fn delete_object(
         .ok_or(AppError::NotFound("File not found".to_string()))?;
 
     // Delete the object from the Object Storage
-    client.store_client.delete(file.file_key.to_string().as_str()).await?;
+    client.store_client.delete(file.file_key.to_string().as_str(), None).await?;
 
     // Delete the file metadata from the database
     file.delete(&client.db).await?;
