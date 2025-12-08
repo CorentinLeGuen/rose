@@ -21,7 +21,7 @@ jobs:
           override: true
 
       - name: Install components
-        run: rustup component add llvm-tools-preview rust-rc
+        run: rustup component add llvm-tools-preview rust-src
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
