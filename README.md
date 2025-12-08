@@ -4,6 +4,8 @@ Rose (Rust Object Storage Env) is a service based on [_object_store_](https://do
 
 [![Project Status](https://img.shields.io/badge/status-in%20development-orange?style=for-the-badge)](https://github.com/CorentinLeGuen/nuage/tags)
 
+[![codecov](https://codecov.io/github/CorentinLeGuen/rose/graph/badge.svg?token=8KJUWI4CK5)](https://codecov.io/github/CorentinLeGuen/rose)
+
 ## How to install
 
 ### Database
