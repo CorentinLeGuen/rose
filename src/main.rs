@@ -44,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
         secret_access_key: config.os_secret_access_key.clone(),
         endpoint: config.os_endpoint.clone(),
     };
+    let store_client = OSClient::new(store_config)?;
     tracing::info!("Object Store initialized");
 
     let db = Database::connect(config.db_url.clone()).await?;
