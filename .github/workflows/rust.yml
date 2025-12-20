@@ -30,10 +30,10 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
-      - name: Install components
-        run: rustup component add llvm-tools-preview rust-src
-      - name: Install coverage dependency
-        run: cargo install cargo-llvm-cov --locked
+      - name: Install components & dependencies
+        run: | 
+          rustup component add llvm-tools-preview rust-src
+          cargo install cargo-llvm-cov --locked
       - name: Run tests with coverage
         run: cargo llvm-cov test --lcov --output-path=./lcov.info
       - name: Upload coverage
