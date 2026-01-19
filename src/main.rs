@@ -8,17 +8,18 @@ use axum::{
     routing::{get, head, put, delete},
     Router,
 };
-use config::Config;
-use storage::{S3Client, S3Config};
+use storage::S3Client;
 use sea_orm::{Database, DatabaseConnection};
 use tower::{ServiceBuilder};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use crate::config::Config;
 
 #[derive(Clone)]
 pub struct AppState {
     pub store_client: S3Client,
     pub db: DatabaseConnection,
+    pub config: Config,
 }
 
 #[tokio::main]
@@ -34,25 +35,19 @@ async fn main() -> anyhow::Result<()> {
 
     // loading config
     let config = Config::from_env()?;
-    tracing::info!("Config loaded, bucket {} and region {}", config.s3_bucket, config.s3_region);
+    tracing::info!("Config of bucket '{}' loaded", config.s3_bucket);
     
     // create Object Storage client
-    let store_config = S3Config {
-        endpoint: config.s3_endpoint.clone(),
-        access_key_id: config.s3_access_key_id.clone(),
-        secret_access_key: config.s3_secret_access_key.clone(),
-        region: config.s3_region.clone(),
-        bucket: config.s3_bucket.clone(),
-    };
-    let store_client = S3Client::new(store_config).await;
+    let store_client = S3Client::new(&config).await;
     tracing::info!("Object Store initialized");
 
-    let db = Database::connect(config.db_url.clone()).await?;
+    let db = Database::connect(config.db_url).await?;
     tracing::info!("Database connected");
 
     let state = AppState {
         store_client,
         db,
+        config,
     };
 
     let app = Router::new()
