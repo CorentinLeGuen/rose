@@ -48,11 +48,7 @@ pub async fn delete_object(
             &file_meta.file_key.to_string(), 
             Some(&file_version_id)
         )
-        .await
-        .map_err(|e| {
-            tracing::error!("S3 Delete error: {:?}", e);
-            AppError::InternalError("Failed to delete object from storage".to_string())
-        })?;
+        .await?;
 
     // delete from db
     file_meta.delete(&state.db).await?;

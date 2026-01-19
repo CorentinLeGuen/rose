@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use aws_sdk_s3::error::SdkError;
+use aws_sdk_s3::operation::delete_object::DeleteObjectError;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::operation::head_object::HeadObjectError;
 use serde_json::json;
@@ -75,6 +76,14 @@ impl From<SdkError<HeadObjectError>> for AppError {
             }
             _ => AppError::InternalError(format!("S3 Error: {}", err))
         }
+    }
+}
+
+// aws delete object error mapper
+impl From<SdkError<DeleteObjectError>> for AppError {
+    fn from(err: SdkError<DeleteObjectError>) -> Self {
+        tracing::error!("S3 Delete Error: {:?}", err);
+        AppError::InternalError("Failed to delete object from storage".to_string())
     }
 }
 
