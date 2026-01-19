@@ -1,96 +1,93 @@
-use aws_sdk_s3::{
-    operation::delete_object::DeleteObjectError,
-    error::SdkError,
-};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use aws_sdk_s3::error::SdkError;
+use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::operation::head_object::HeadObjectError;
 use serde_json::json;
+use tracing::error;
 
-#[derive(Error)]
-pub enum StorageErrorKind {
-    StorageTimeout(String),
-}
-
-#[derive(Error)]
+#[derive(Debug)]
 pub enum AppError {
-    NotFound(String),
-    TimeoutError(String),
-    #[error("Storage error: {0}")]
-    StorageError(StorageErrorKind),
-    DatabaseError(sea_orm::DbErr),
-    InternalError(anyhow::Error),
+    // Client errors (4xx)
     BadRequest(String),
+    NotFound(String),
+    Unauthorized(String),
+
+    // Server errors (5xx)
+    TimeoutError(String),
+    StorageError(String),
+    DatabaseError(String),
+    InternalError(String),
+
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
+        let (status, message) = match self {
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+
             AppError::TimeoutError(msg) => (StatusCode::REQUEST_TIMEOUT, msg),
             AppError::StorageError(err) => {
-
-                tracing::error!("Storage error: {}", err);
+                error!("Storage error: {}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, format!("Storage error {}", err))
             }
             AppError::DatabaseError(err) => {
-                tracing::error!("Database error: {:?}", err);
+                error!("Database error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error {}", err))
             }
             AppError::InternalError(err) => {
-                tracing::error!("Internal server error: {:?}", err);
+                error!("Internal server error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             }
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
         };
 
         let body = Json(json!({
-            "error": error_message,
+            "error": message,
         }));
 
         (status, body).into_response()
     }
 }
 
-impl From<aws_sdk_s3::Error> for AppError {
-    fn from(err: aws_sdk_s3::Error) -> Self {
+// aws get object error mapper
+impl From<SdkError<GetObjectError>> for AppError {
+    fn from(err: SdkError<GetObjectError>) -> Self {
         match err {
-            aws_sdk_s3::Error::NotFound { .. } => {
-                AppError::NotFound("Object not found".to_string())
+            SdkError::ServiceError(e) if e.err().is_no_such_key() => {
+                AppError::NotFound("File not found".to_string())
             }
-            aws_sdk_s3::Error::NoSuchKey { .. } => {
-                AppError::NotFound("No object found for key provided".to_string())
-            }
-            _ => AppError::StorageError(err),
+            _ => AppError::InternalError(format!("S3 Error: {}", err))
         }
     }
 }
 
-// Mapping S3 errors
-impl From<SdkError<DeleteObjectError>> for AppError {
-    fn from(err: SdkError<DeleteObjectError>) -> Self {
-        match &err {
-            SdkError::TimeoutError(_e) => {
-                AppError::TimeoutError("Deletion request went on timeout".to_string())
+// aws head object error mapper
+impl From<SdkError<HeadObjectError>> for AppError {
+    fn from(err: SdkError<HeadObjectError>) -> Self {
+        match err {
+            SdkError::ServiceError(e) if e.err().is_not_found() => {
+                AppError::NotFound("Metadata not found".to_string())
             }
-            SdkError::ResponseError(_e) => {
-                AppError::StorageError(_e)
-            }
-            _ => AppError::from(anyhow::anyhow!("S3 delete failed: {}", err))
+            _ => AppError::InternalError(format!("S3 Error: {}", err))
         }
     }
 }
 
+// anyhow error mapping
 impl From<anyhow::Error> for AppError {
     fn from(err: anyhow::Error) -> Self {
-        AppError::InternalError(err)
+        AppError::InternalError(err.to_string())
     }
 }
 
+// sea_orm db error mapping
 impl From<sea_orm::DbErr> for AppError {
     fn from(err: sea_orm::DbErr) -> Self {
-        AppError::DatabaseError(err)
+        AppError::DatabaseError(err.to_string())
     }
 }
