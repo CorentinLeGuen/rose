@@ -16,14 +16,10 @@ pub enum AppError {
     // Client errors (4xx)
     BadRequest(String),
     NotFound(String),
-    Unauthorized(String),
 
     // Server errors (5xx)
-    TimeoutError(String),
-    StorageError(String),
     DatabaseError(String),
     InternalError(String),
-
 }
 
 impl IntoResponse for AppError {
@@ -31,13 +27,7 @@ impl IntoResponse for AppError {
         let (status, message) = match self {
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
 
-            AppError::TimeoutError(msg) => (StatusCode::REQUEST_TIMEOUT, msg),
-            AppError::StorageError(err) => {
-                error!("Storage error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("Storage error {}", err))
-            }
             AppError::DatabaseError(err) => {
                 error!("Database error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error {}", err))

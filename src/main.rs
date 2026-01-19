@@ -41,13 +41,13 @@ async fn main() -> anyhow::Result<()> {
     let store_client = S3Client::new(&config).await;
     tracing::info!("Object Store initialized");
 
-    let db = Database::connect(config.db_url).await?;
+    let db = Database::connect(&config.db_url).await?;
     tracing::info!("Database connected");
 
     let state = AppState {
         store_client,
         db,
-        config,
+        config: config.clone(),
     };
 
     let app = Router::new()
