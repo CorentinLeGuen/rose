@@ -1,6 +1,8 @@
-use aws_config::BehaviorVersion;
+use aws_config::{self, BehaviorVersion};
 use aws_sdk_s3::{
-    Client, config::{Credentials, Region}, error::SdkError, 
+    Client, 
+    error::SdkError,
+    config::Builder as S3ConfigBuilder,
     operation::{
         delete_object::{DeleteObjectError, DeleteObjectOutput}, 
         get_object::{GetObjectError, GetObjectOutput}, 
@@ -9,53 +11,26 @@ use aws_sdk_s3::{
     },
     primitives::ByteStream,
 };
+use crate::config::Config;
 use bytes::Bytes;
 
 
 #[derive(Clone)]
-pub struct S3Config {
-    pub endpoint: Option<String>,
-    pub access_key_id: String,
-    pub secret_access_key: String,
-    pub region: String,
-    pub bucket: String,
-}
-
-#[derive(Clone)]
 pub struct S3Client {
     client: Client,
-    bucket: String,
+    bucket_name: String,
 }
 
 impl S3Client {
-    pub async fn new(config: S3Config) -> Self {
-        let credentials = Credentials::new(
-            &config.access_key_id,
-            &config.secret_access_key,
-            None,
-            None,
-            "custom",
-        );
-        let mut aws_config = aws_config::defaults(BehaviorVersion::latest())
-            .credentials_provider(credentials)
-            .region(Region::new(config.region));
-        if let Some(endpoint) = config.endpoint {
-            aws_config = aws_config.endpoint_url(endpoint);
-        }
-        let sdk_config = aws_config.load().await;
-        let client = Client::new(&sdk_config);
+    pub async fn new(config: &Config) -> Self {
+        let aws_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+        let s3_config_builder = S3ConfigBuilder::from(&aws_config);
+
+        let client = Client::from_conf(s3_config_builder.build());
         
         Self {
             client,
-            bucket: config.bucket,
-        }
-    }
-
-    fn map_sdk_error<E: std::fmt::Display>(e: SdkError<E>) -> AppError {
-        let msg = match e {
-            SdkError::ConstructionFailure(ref e) => format!("S3 Failure"),
-            SdkError::DispatchFailure(_) => "Network failure".to_string(),
-            SdkError::ResponseError(ref r) => format!("Response error: {}", r),
+            bucket_name: config.s3_bucket.clone(),
         }
     }
 
@@ -65,7 +40,10 @@ impl S3Client {
         version_id: Option<&str>
     ) -> Result<GetObjectOutput, SdkError<GetObjectError>> 
     {
-        let mut request = self.client.get_object().bucket(&self.bucket).key(path);
+        let mut request = self.client
+            .get_object()
+            .bucket(&self.bucket_name)
+            .key(path);
 
         if let Some(vid) = version_id {
             request = request.version_id(vid);
@@ -80,7 +58,10 @@ impl S3Client {
         version_id: Option<&str>,
     ) -> Result<HeadObjectOutput, SdkError<HeadObjectError>>
     {
-        let mut request = self.client.head_object().bucket(&self.bucket).key(path);
+        let mut request = self.client
+            .head_object()
+            .bucket(&self.bucket_name)
+            .key(path);
 
         if let Some(vid) = version_id {
             request = request.version_id(vid);
@@ -97,7 +78,7 @@ impl S3Client {
     {
         self.client
             .put_object()
-            .bucket(&self.bucket)
+            .bucket(&self.bucket_name)
             .key(path)
             .body(ByteStream::from(data))
             .send()
@@ -110,7 +91,10 @@ impl S3Client {
         version_id: Option<&str>
     ) -> Result<DeleteObjectOutput, SdkError<DeleteObjectError>>
     {
-        let mut request = self.client.delete_object().bucket(&self.bucket).key(path);
+        let mut request = self.client
+            .delete_object()
+            .bucket(&self.bucket_name)
+            .key(path);
 
         if let Some(vid) = version_id {
             request = request.version_id(vid);

@@ -1,6 +1,6 @@
 # :rose: Rose
 
-Rose (Rust Object Storage Endpoints) is an extra layer of Object storage services that implements [AWS S3 SDK protocol](https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/) to keep track of space used.
+Rose (Rust Object Storage Endpoints) is an extra layer API of Object storage services that implements [AWS S3 SDK protocol](https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/) and use [cockroachDB](https://www.cockroachlabs.com/) to keep track of space used.
 
 [![Project Status](https://img.shields.io/badge/status-in%20development-orange?style=for-the-badge)](https://github.com/CorentinLeGuen/nuage/tags)
 
@@ -27,12 +27,15 @@ And build the app with `cargo build --release`, and then [rose app should be ava
 ### Current features
 
 - Basic GET, PUT, HEAD and DELETE endpoints
+- *aws_sdk_s3* compatible storage
 - Database schema migrations
 
 ### TODO
 
 - :shipit: more features ...
-- http requests collection ? JSON or .http scripts
+- http requests collection to test endpoints ? (.http scripts)
+- add "how to use" section in Readme
+- update [lifecycle policy](lifecycle-policy.json) with something more robust but open to any S3 compatible bucket
 - FAQ ?
 - managing versionned buckets
 - :whale: Set up Rust as a container
