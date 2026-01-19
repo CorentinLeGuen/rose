@@ -8,9 +8,8 @@ Rose (Rust Object Storage Endpoints) is an extra layer API of Object storage ser
 
 ### Database
 
-Rose is using [cockroachDB](https://www.cockroachlabs.com/) as database and migrations are made with `cargo run --bin migrate`.
-
-You can setup a simple cockroach container with `docker run -d --name rosedb -p 26257:26257 cockroachdb/cockroach:latest start-single-node --insecure`.
+Rose is using [cockroachDB](https://www.cockroachlabs.com/) as database.
+You can setup a simple cockroach container with `docker run -d --name rosedb -p 26257:26257 cockroachdb/cockroach:latest start-single-node --insecure` then run migrations with `cargo run --bin migrate` to create tables.
 
 ### Object Storage
 
@@ -36,6 +35,7 @@ And build the app with `cargo build --release`, and then [rose app should be ava
 - http requests collection to test endpoints ? (.http scripts)
 - add "how to use" section in Readme
 - update [lifecycle policy](lifecycle-policy.json) with something more robust but open to any S3 compatible bucket
+- migration: set database url from config
 - FAQ ?
 - managing versionned buckets
 - :whale: Set up Rust as a container
