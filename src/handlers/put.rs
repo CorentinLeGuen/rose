@@ -1,15 +1,20 @@
 use axum::{
-    Json, body::Bytes, extract::{Path, State}, http::{HeaderMap, StatusCode}, response::IntoResponse
+    Json, 
+    body::Bytes, 
+    extract::{Path, State}, 
+    http::{HeaderMap, StatusCode}, 
+    response::IntoResponse
 };
 use mime_guess;
 use uuid::Uuid;
-use sea_orm::*;
-use rose::entities::file;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde_json::json;
-use crate::{AppState, error::AppError, entities::user};
+use crate::AppState;
+use crate::error::AppError;
+use crate::entities::{user, file};
 
 pub async fn put_object(
-    State(client): State<AppState>,
+    State(state): State<AppState>,
     Path(key): Path<String>,
     headers: HeaderMap,
     body: Bytes,
@@ -28,50 +33,64 @@ pub async fn put_object(
         .unwrap_or(mime_guess::from_path(&key).first_or_octet_stream().to_string().as_str())
         .to_string();
     let content_size = body.len() as i64;
+    let file_name = key.split('/').last().unwrap_or(&key).to_string();
 
     tracing::info!("PUT request from user {} for key {} ({} bytes)", user_id, key, content_size);
 
     // Create or update user record if not exists
-    let user_exists = user::Entity::find()
-        .filter(user::Column::UserId.eq(user_id))
-        .one(&client.db)
-        .await?;
+    let user_exists = user::Entity::find_by_id(user_id).one(&state.db).await?;
     // If user does not exist, we create a new user record
     if user_exists.is_none() {
         let new_user = user::ActiveModel::new(
             user_id,
             0,
         );
-        new_user.insert(&client.db).await?;
-        tracing::info!("Created new user with user_id {}", user_id);
+        new_user.insert(&state.db).await?;
+        tracing::info!("Created new user profile {}", user_id);
     }
 
-    // Save file metadata to the database
-    let new_file = file::ActiveModel::new(
+    let new_file_uuid = Uuid::now_v7();
+    let s3_key_string = new_file_uuid.to_string();
+
+    let s3_output = state.store_client.put(&s3_key_string, body).await?;
+    let s3_version_id = s3_output.version_id.unwrap_or_else(|| "null".to_string());
+
+    // transactionnal update
+    let txn = state.db.begin().await?;
+
+    let existing_active_file = file::Entity::find()
+        .filter(file::Column::UserId.eq(user_id))
+        .filter(file::Column::FilePath.eq(key.clone()))
+        .filter(file::Column::IsLatest.eq(true))
+        .one(&txn)
+        .await?;
+    if let Some(old_file) = existing_active_file {
+        let mut old_active: file::ActiveModel = old_file.into();
+        old_active.is_latest = Set(false);
+        old_active.update(&txn).await?;
+    }
+    let new_file_entry = file::ActiveModel::new(
+        new_file_uuid,
         user_id,
-        key.split('/').last().unwrap_or(&key).to_string(),
+        file_name,
         key.clone(),
         content_type,
         content_size,
-        "0".to_string(), // Placeholder for version, should be updated by Object Storage response
+        s3_version_id.clone()
     );
-    let file_record = new_file.insert(&client.db).await?;
-    let file_uuid = file_record.file_key.to_string();
-
-    // Store the object in the Object Storage
-    let put_result = client.store_client.put(file_uuid.as_str(), body).await?;
-
-    // Update file record with version info from Object Storage
-    let mut file_updated: file::ActiveModel = file_record.into();
-    file_updated.version = Set(put_result.version.unwrap_or_default());
-    file_updated.update(&client.db).await?;
+    new_file_entry.insert(&txn).await?;
+    
+    // commit transaction
+    txn.commit().await?;
+    
 
     Ok((
         StatusCode::CREATED,
         Json(json!({
-            "message": "Object created successfully",
-            "key": key,
-            "file_key": file_uuid,
+            "message": "New object created successfully",
+            "file_path": key,
+            "file_key": s3_key_string,
+            "version": s3_version_id,
         }))
     ))
 }

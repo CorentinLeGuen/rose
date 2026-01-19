@@ -6,11 +6,9 @@ pub struct Migrator;
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
-            Box::new(m20251112_140000_create_tables::Migration),
-            Box::new(m20251114_174900_add_space_used_triggers::Migration),
+            Box::new(m20251128_165000_create_tables::Migration)
         ]
     }
 }
 
-pub mod m20251112_140000_create_tables;
-pub mod m20251114_174900_add_space_used_triggers;
+pub mod m20251128_165000_create_tables;

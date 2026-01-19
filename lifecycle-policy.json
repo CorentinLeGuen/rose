@@ -1,0 +1,29 @@
+{
+    "Rules": [
+        {
+            "ID": "DeleteExpiredDeleteMarkers",
+            "Status": "Enabled",
+            "Filter": {},
+            "Expiration": {
+                "ExpiredObjectDeleteMarker": true
+            }
+        },
+        {
+            "ID": "DeleteOldDeleteMarkers",
+            "Status": "Enabled",
+            "Filter": {},
+            "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30,
+                "NewerNoncurrentVersions": 1
+            }
+        },
+        {
+            "ID": "DeleteIncompleteMultipartUploads",
+            "Status": "Enabled",
+            "Filter": {},
+            "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+            }
+        }
+    ]
+}
