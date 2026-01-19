@@ -1,15 +1,18 @@
 use axum::{
-    body::Body, 
+    body::Body,
     extract::{Path, State}, 
-    http::{ header, HeaderMap, StatusCode }, 
+    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::IntoResponse
 };
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 use uuid::Uuid;
-use sea_orm::*;
-use crate::{AppState, error::AppError, entities::file};
+use tokio_util::io::ReaderStream;
+use crate::AppState;
+use crate::error::AppError; 
+use crate::entities::file;
 
 pub async fn get_object(
-    State(client): State<AppState>,
+    State(state): State<AppState>,
     Path(key): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
@@ -27,67 +30,43 @@ pub async fn get_object(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    if version_id.is_some() {
-        tracing::info!("GET request for user {} and key {}:{}", user_id, key, version_id.clone().unwrap());
+    tracing::info!("GET request for user {}, key {}:{:?}", user_id, key, version_id);
 
-        // Retrieve file metadata from the database
-        let file = file::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(file::Column::UserId.eq(user_id))
-                    .add(file::Column::FilePath.eq(key.clone()))
-                    .add(file::Column::Version.eq(version_id.clone().unwrap()))
-            )
-            .one(&client.db)
-            .await?
-            .ok_or(AppError::NotFound("File not found".to_string()))?;
+    let mut query = file::Entity::find()
+        .filter(file::Column::UserId.eq(user_id))
+        .filter(file::Column::FilePath.eq(key.clone()));
 
-        // Retrieve the object from the Object Storage
-        let stream = client.store_client.get(file.file_key.to_string().as_str(), Some(version_id.unwrap().as_str())).await?;
-        let body = Body::from_stream(stream.body);
-
-        // header management
-        let mut headers = HeaderMap::new();
-        headers.insert(header::CONTENT_TYPE, file.content_type.parse().unwrap());
-        headers.insert(header::CONTENT_LENGTH, file.content_size.to_string().parse().unwrap());
-        headers.insert(header::CONTENT_DISPOSITION, format!("attachement; filename=\"{}\"", file.file_name).parse().unwrap());
-        headers.insert("x-version-id", file.version.parse().unwrap());
-
-        Ok((
-            StatusCode::OK,
-            headers,
-            body
-        ))
+    if let Some(ref vid) = version_id {
+        query = query.filter(file::Column::S3VersionId.eq(vid));
     } else {
-        tracing::info!("GET request for user {} and key {}", user_id, key);
-
-        // Retrieve file metadata from the database
-        let file = file::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(file::Column::UserId.eq(user_id))
-                    .add(file::Column::FilePath.eq(key.clone()))
-                    .add(file::Column::IsLatest.eq(true))
-            )
-            .one(&client.db)
-            .await?
-            .ok_or(AppError::NotFound("File not found".to_string()))?;
-
-        // Retrieve the object from the Object Storage
-        let stream = client.store_client.get(file.file_key.to_string().as_str(), None).await?;
-        let body = Body::from_stream(stream);
-
-        // header management
-        let mut headers = HeaderMap::new();
-        headers.insert(header::CONTENT_TYPE, file.content_type.parse().unwrap());
-        headers.insert(header::CONTENT_LENGTH, file.content_size.to_string().parse().unwrap());
-        headers.insert(header::CONTENT_DISPOSITION, format!("attachement; filename=\"{}\"", file.file_name).parse().unwrap());
-        headers.insert("x-version-id", file.version.parse().unwrap());
-
-        Ok((
-            StatusCode::OK,
-            headers,
-            body
-        ))
+        query = query.filter(file::Column::IsLatest.eq(true));
     }
+
+    let file_meta = query.one(&state.db).await?.ok_or_else(|| AppError::NotFound("File not found".to_string()))?;
+    let s3_output = state.store_client.get(&file_meta.file_key.to_string(), version_id.as_deref()).await?;
+    // from AWS Stream errors to standard Axum I/O error
+    let reader = s3_output.body.into_async_read();
+    let stream = ReaderStream::new(reader);
+    let body = Body::from_stream(stream);
+
+    let mut response_headers = HeaderMap::new();
+    let mut insert_header = |key, value: String| {
+        if let Ok(val) = HeaderValue::from_str(&value) {
+            response_headers.insert(key, val);
+        }
+    };
+    insert_header(header::CONTENT_TYPE, file_meta.content_type);
+    insert_header(header::CONTENT_LENGTH, file_meta.content_size.to_string());
+    insert_header(header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", file_meta.file_name));
+    insert_header(HeaderName::from_static("x-version-id"), file_meta.s3_version_id);
+
+    if let Some(etag) = s3_output.e_tag {
+        insert_header(header::ETAG, etag);
+    }
+
+    Ok((
+        StatusCode::OK,
+        response_headers,
+        body
+    ))
 }
