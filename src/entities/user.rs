@@ -8,8 +8,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: Uuid,
     pub total_space_used: i64,
-    pub updated_at: DateTime,
-    pub last_auto_sync_at: Option<DateTime>,
+    pub updated_at: DateTimeWithTimeZone,
+    pub last_auto_sync_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -34,7 +34,7 @@ impl ActiveModel {
         Self {
             user_id: Set(user_id),
             total_space_used: Set(total_space_used),
-            updated_at: Set(chrono::Utc::now().naive_utc()),
+            updated_at: Set(chrono::Utc::now().into()),
             last_auto_sync_at: Set(None),
         }
     }

@@ -32,7 +32,7 @@ pub async fn head_object(
 
     // if there is a version_id set, we take this version, otherwise the latest version
     if let Some(v_id) = version_id {
-        query = query.filter(file::Column::Version.eq(v_id));
+        query = query.filter(file::Column::S3VersionId.eq(v_id));
     } else {
         query = query.filter(file::Column::IsLatest.eq(true));
     }
@@ -51,12 +51,12 @@ pub async fn head_object(
         response_headers.insert(header::LAST_MODIFIED, val);
     }
 
-    let etag_val = format!("\"{}\"", file.version);
+    let etag_val = format!("\"{}\"", file.s3_version_id);
     if let Ok(val) = HeaderValue::from_str(&etag_val) {
         response_headers.insert(header::ETAG, val);
     }
 
-    if let Ok(val) = HeaderValue::from_str(&file.version) {
+    if let Ok(val) = HeaderValue::from_str(&file.s3_version_id) {
         response_headers.insert("x-amz-version-id", val);
     }
 
