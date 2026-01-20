@@ -4,6 +4,8 @@ Rose (Rust Object Storage Endpoints) is an extra layer API of Object storage ser
 
 [![Project Status](https://img.shields.io/badge/status-in%20development-orange?style=for-the-badge)](https://github.com/CorentinLeGuen/nuage/tags)
 
+[![codecov](https://codecov.io/github/CorentinLeGuen/rose/graph/badge.svg?token=8KJUWI4CK5)](https://codecov.io/github/CorentinLeGuen/rose)
+
 ## Requirements
 
 ### Database
