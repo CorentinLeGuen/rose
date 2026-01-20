@@ -1,14 +1,16 @@
 use axum::{
     extract::{Path, State},
-    http::{StatusCode, header, HeaderMap},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::IntoResponse,
 };
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use uuid::Uuid;
-use sea_orm::*;
-use crate::{AppState, error::AppError, entities::file};
+use crate::AppState;
+use crate::error::AppError;
+use crate::entities::file;
 
 pub async fn head_object(
-    State(client): State<AppState>,
+    State(state): State<AppState>,
     Path(key): Path<String>,
     headers: HeaderMap
 ) -> Result<impl IntoResponse, AppError> {
@@ -17,25 +19,49 @@ pub async fn head_object(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| Uuid::parse_str(v).ok())
         .ok_or(AppError::BadRequest("Missing or invalid x-user-id header".to_string()))?;
-    tracing::info!("HEAD request for user {} and key {}", user_id, key);
+    let version_id = headers
+        .get("x-version-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    let file = file::Entity::find()
-        .filter(
-            Condition::all()
-                .add(file::Column::UserId.eq(user_id))
-                .add(file::Column::FilePath.eq(key.clone()))
-        )
-        .one(&client.db)
-        .await?
-        .ok_or(AppError::NotFound("File not found".to_string()))?;
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_LENGTH, file.content_size.to_string().parse().unwrap());
-    headers.insert(header::CONTENT_TYPE, file.content_type.parse().unwrap());
-    headers.insert(header::CONTENT_LOCATION, file.file_path.parse().unwrap());
-    headers.insert(header::DATE, file.added_at.to_string().parse().unwrap());
+    tracing::info!("HEAD request for user {} and key {}:{:?}", user_id, key, version_id);
+
+    let mut query = file::Entity::find()
+        .filter(file::Column::UserId.eq(user_id))
+        .filter(file::Column::FilePath.eq(&key));
+
+    // if there is a version_id set, we take this version, otherwise the latest version
+    if let Some(v_id) = version_id {
+        query = query.filter(file::Column::S3VersionId.eq(v_id));
+    } else {
+        query = query.filter(file::Column::IsLatest.eq(true));
+    }
+
+    let file = query.one(&state.db).await?.ok_or(AppError::NotFound("File not found".to_string()))?;
+
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(file.content_size as u64));
+
+    if let Ok(val) = HeaderValue::from_str(&file.content_type) {
+        response_headers.insert(header::CONTENT_TYPE, val);
+    }
+
+    let last_modified = file.added_at.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+    if let Ok(val) = HeaderValue::from_str(&last_modified) {
+        response_headers.insert(header::LAST_MODIFIED, val);
+    }
+
+    let etag_val = format!("\"{}\"", file.s3_version_id);
+    if let Ok(val) = HeaderValue::from_str(&etag_val) {
+        response_headers.insert(header::ETAG, val);
+    }
+
+    if let Ok(val) = HeaderValue::from_str(&file.s3_version_id) {
+        response_headers.insert("x-amz-version-id", val);
+    }
 
     Ok((
         StatusCode::OK,
-        headers
+        response_headers
     ))
 }

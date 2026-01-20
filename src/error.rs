@@ -3,63 +3,99 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use aws_sdk_s3::error::SdkError;
+use aws_sdk_s3::operation::delete_object::DeleteObjectError;
+use aws_sdk_s3::operation::put_object::PutObjectError;
+use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::operation::head_object::HeadObjectError;
 use serde_json::json;
+use tracing::error;
 
 #[derive(Debug)]
 pub enum AppError {
-    NotFound(String),
-    StorageError(object_store::Error),
-    DatabaseError(sea_orm::DbErr),
-    InternalError(anyhow::Error),
+    // Client errors (4xx)
     BadRequest(String),
+    NotFound(String),
+
+    // Server errors (5xx)
+    DatabaseError(String),
+    InternalError(String),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
+        let (status, message) = match self {
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            AppError::StorageError(err) => {
-                tracing::error!("Storage error: {:?}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("Storage error {}", err))
-            }
+
             AppError::DatabaseError(err) => {
-                tracing::error!("Database error: {:?}", err);
+                error!("Database error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error {}", err))
             }
             AppError::InternalError(err) => {
-                tracing::error!("Internal server error: {:?}", err);
+                error!("Internal server error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             }
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
         };
 
         let body = Json(json!({
-            "error": error_message,
+            "error": message,
         }));
 
         (status, body).into_response()
     }
 }
 
-impl From<object_store::Error> for AppError {
-    fn from(err: object_store::Error) -> Self {
+// aws get object error mapper
+impl From<SdkError<GetObjectError>> for AppError {
+    fn from(err: SdkError<GetObjectError>) -> Self {
         match err {
-            object_store::Error::NotFound { .. } => {
-                AppError::NotFound("Object not found".to_string())
+            SdkError::ServiceError(e) if e.err().is_no_such_key() => {
+                AppError::NotFound("File not found".to_string())
             }
-            _ => AppError::StorageError(err),
+            _ => AppError::InternalError(format!("S3 Error: {}", err))
         }
     }
 }
 
-impl From<anyhow::Error> for AppError {
-    fn from(err: anyhow::Error) -> Self {
-        AppError::InternalError(err)
+// aws head object error mapper
+impl From<SdkError<HeadObjectError>> for AppError {
+    fn from(err: SdkError<HeadObjectError>) -> Self {
+        match err {
+            SdkError::ServiceError(e) if e.err().is_not_found() => {
+                AppError::NotFound("Metadata not found".to_string())
+            }
+            _ => AppError::InternalError(format!("S3 Error: {}", err))
+        }
     }
 }
 
+// aws put object error mapper
+impl From<SdkError<PutObjectError>> for AppError {
+    fn from(err: SdkError<PutObjectError>) -> Self {
+        tracing::error!("S3 Put Error: {:?}", err);
+        AppError::InternalError("Failed to upload object to storage".to_string())
+    }
+}
+
+// aws delete object error mapper
+impl From<SdkError<DeleteObjectError>> for AppError {
+    fn from(err: SdkError<DeleteObjectError>) -> Self {
+        tracing::error!("S3 Delete Error: {:?}", err);
+        AppError::InternalError("Failed to delete object from storage".to_string())
+    }
+}
+
+// anyhow error mapping
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        AppError::InternalError(err.to_string())
+    }
+}
+
+// sea_orm db error mapping
 impl From<sea_orm::DbErr> for AppError {
     fn from(err: sea_orm::DbErr) -> Self {
-        AppError::DatabaseError(err)
+        AppError::DatabaseError(err.to_string())
     }
 }
