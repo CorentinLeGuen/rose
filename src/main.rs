@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
     // loading config
     let config = Config::from_env()?;
     tracing::info!("Config of bucket '{}' loaded", config.s3_bucket);
-    
+
     // create Object Storage client
     let store_client = S3Client::new(&config).await;
     tracing::info!("Object Store initialized");
