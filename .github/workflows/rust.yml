@@ -35,7 +35,7 @@ jobs:
           rustup component add llvm-tools-preview rust-src
           cargo install cargo-llvm-cov --locked
       - name: Run tests with coverage
-        run: cargo llvm-cov test --lcov --output-path=./lcov.info
+        run: cargo llvm-cov --ignore-filename-regex '(src/config\.rs|src/main\.rs|src/bin/|src/migrator/)' test --lcov --output-path=./lcov.info
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
