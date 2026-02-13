@@ -1,0 +1,24 @@
+### PUT request - create a new file
+PUT {{host}}/objects/data.json
+x-user-id: 00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+< ./data.json
+
+### HEAD request
+HEAD {{host}}/objects/data.json
+x-user-id: 00000000-0000-0000-0000-000000000000
+
+### GET request with existing file
+GET {{host}}/objects/data.json
+Accept: application/json
+x-user-id: 00000000-0000-0000-0000-000000000000
+
+### GET request not existing file
+GET {{host}}/objects/not_existing_file.pdf
+Accept: application/json
+x-user-id: 00000000-0000-0000-0000-000000000000
+
+### DELETE request
+DELETE {{host}}/objects/data.json
+x-user-id: 00000000-0000-0000-0000-000000000000
